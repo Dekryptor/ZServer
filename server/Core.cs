@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using IniHelper = ZUtility.ZIniParser;
 
 namespace server
 {
@@ -13,47 +14,57 @@ namespace server
 		private static int _client_id = -1;
 
 		// TODO: read from settings.ini
-		private const int _PORT = 2222;
-		private const string _IP_ADDRESS = "127.0.0.1";
-		private const int _BACKLOG = -1; // maximum length of the pending connections queue
+		private const string _CONFIG_PATH = ".\\config.ini";
+		private const string _CONFIG_CONNECTION_SECTION = "Connection";
+
+		private static int _backlog; // maximum length of the pending connections queue
+		private static int _port;
+		private static string _host;
 
 		private static void Main()
 		{
-			Console.WriteLine( "Initializing..." );
-
-			var server = new Socket( AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp ) { ReceiveTimeout = -1 };
-			var endpoint = new IPEndPoint( IPAddress.Parse( _IP_ADDRESS ), _PORT );
-
-			try
+			if ( readConfig() )
 			{
-				server.Bind( endpoint );
-				server.Listen( _BACKLOG );
-			}
-			catch ( Exception )
-			{
-				Console.WriteLine( "Listening failed!" );
-				Console.ReadKey();
+				Console.WriteLine( "Initializing..." );
 
-				return;
-			}
+				var server = new Socket( AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp ) { ReceiveTimeout = -1 };
+				var endpoint = new IPEndPoint( IPAddress.Parse( _host ), _port );
 
-			Console.WriteLine( $"Started listening @ {endpoint}" );
-
-			while ( true )
-			{
-				var client = server.Accept();
-
-				new System.Threading.Thread( () =>
+				try
 				{
-					try
+					server.Bind( endpoint );
+					server.Listen( _backlog );
+				}
+				catch ( Exception )
+				{
+					Console.WriteLine( "Listening failed!" );
+					Console.ReadKey();
+
+					return;
+				}
+
+				Console.WriteLine( $"Started listening @ {endpoint}" );
+
+				while ( true )
+				{
+					var client = server.Accept();
+
+					new System.Threading.Thread( () =>
 					{
-						Process( client, ++_client_id );
-					}
-					catch ( Exception ex )
-					{
-						Console.WriteLine( $"Client connection processing error: {ex.Message}. Clients left: {_client_id}" );
-					}
-				} ).Start();
+						try
+						{
+							Process( client, ++_client_id );
+						}
+						catch ( Exception ex )
+						{
+							Console.WriteLine( $"Client connection processing error: {ex.Message}. Clients left: {_client_id}" );
+						}
+					} ).Start();
+				}
+			}
+			else
+			{
+				Console.WriteLine( $"Failed to load server config: {_CONFIG_PATH}" );
 			}
 		}
 
@@ -61,7 +72,9 @@ namespace server
 			Socket client,
 			int    id )
 		{
-			Console.WriteLine( $"#{id}_[ {client.RemoteEndPoint} ]: connected" );
+			var log_prefix = $"#{id}_[ {client.RemoteEndPoint} ]: ";
+
+			Console.WriteLine( log_prefix + "connected" );
 
 			while ( true )
 			{
@@ -70,7 +83,7 @@ namespace server
 
 				if ( received == 0 )
 				{
-					Console.WriteLine( $"#{id}_[ {client.RemoteEndPoint} ]: closed connection" );
+					Console.WriteLine( log_prefix + "closed connection" );
 
 					return;
 				}
@@ -80,7 +93,7 @@ namespace server
 
 				var message = _encoding.GetString( resp_bytes_list.ToArray() );
 
-				Console.WriteLine( $"#{id}_[ {client.RemoteEndPoint} ]: {message}" );
+				Console.WriteLine( log_prefix + message );
 
 				if ( message.Contains( "/time" ) )
 				{
@@ -91,6 +104,23 @@ namespace server
 					client.Send( _encoding.GetBytes( message ) ); // simple echo
 				}
 			}
+		}
+
+		private static bool readConfig(
+			string config_path = _CONFIG_PATH )
+		{
+			Console.WriteLine( $"Reading server config: {config_path} ..." );
+
+			var success = true;
+
+			success = int.TryParse( IniHelper.readValue( _CONFIG_CONNECTION_SECTION, "backlog", config_path ), out _backlog );
+			success = success && int.TryParse( IniHelper.readValue( _CONFIG_CONNECTION_SECTION, "port", config_path ), out _port );
+
+			_host = IniHelper.readValue( _CONFIG_CONNECTION_SECTION, "host", config_path );
+
+			success = success && ( !string.IsNullOrWhiteSpace( _host ) );
+
+			return success;
 		}
 	}
 }
