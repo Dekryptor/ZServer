@@ -12,20 +12,22 @@ namespace server
 		private const int _BUFFER_SIZE = 1024;
 		private static int _client_id = -1;
 
+		// TODO: read from settings.ini
+		private const int _PORT = 2222;
+		private const string _IP_ADDRESS = "127.0.0.1";
+		private const int _BACKLOG = -1; // maximum length of the pending connections queue
+
 		private static void Main()
 		{
 			Console.WriteLine( "Initializing..." );
 
-			const int backlog = -1;
-			const int port = 2222;
-
 			var server = new Socket( AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp ) { ReceiveTimeout = -1 };
-			var endpoint = new IPEndPoint( IPAddress.Parse( "127.0.0.1" ), port );
+			var endpoint = new IPEndPoint( IPAddress.Parse( _IP_ADDRESS ), _PORT );
 
 			try
 			{
 				server.Bind( endpoint );
-				server.Listen( backlog );
+				server.Listen( _BACKLOG );
 			}
 			catch ( Exception )
 			{
@@ -42,20 +44,22 @@ namespace server
 				var client = server.Accept();
 
 				new System.Threading.Thread( () =>
-											 {
-												 try
-												 {
-													 Process( client, ++_client_id );
-												 }
-												 catch ( Exception ex )
-												 {
-													 Console.WriteLine( $"Client connection processing error: {ex.Message}. Clients left: {_client_id}" );
-												 }
-											 } ).Start();
+				{
+					try
+					{
+						Process( client, ++_client_id );
+					}
+					catch ( Exception ex )
+					{
+						Console.WriteLine( $"Client connection processing error: {ex.Message}. Clients left: {_client_id}" );
+					}
+				} ).Start();
 			}
 		}
 
-		private static void Process( Socket client, int id )
+		private static void Process(
+			Socket client,
+			int    id )
 		{
 			Console.WriteLine( $"#{id}_[ {client.RemoteEndPoint} ]: connected" );
 
@@ -78,9 +82,9 @@ namespace server
 
 				Console.WriteLine( $"#{id}_[ {client.RemoteEndPoint} ]: {message}" );
 
-				if ( message.Contains( "lesha sasat" ) )
+				if ( message.Contains( "/time" ) )
 				{
-					client.Send( _encoding.GetBytes( "orda SoSaT'" ) );
+					client.Send( _encoding.GetBytes( DateTime.Now.ToString( "h:mm:ss tt zz" ) ) );
 				}
 				else
 				{
